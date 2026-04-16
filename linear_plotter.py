@@ -2,10 +2,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.widgets import Slider, TextBox, Button
 import matplotlib.ticker as ticker
+import matplotlib.patches as patches
 
-# Настройка бэкенда для отображения в отдельном окне (важно для скриптов вне Jupyter)
+# Настройка бэкенда для отображения в отдельном окне или inline
 import matplotlib
-matplotlib.use('TkAgg')
+# Используем Qt5Agg как основной, так как он более стабилен в Linux средах
+try:
+    matplotlib.use('Qt5Agg')
+except ImportError:
+    try:
+        matplotlib.use('TkAgg')
+    except ImportError:
+        matplotlib.use('Agg')  # Для сред без GUI
 
 class LinearFunctionPlotter:
     def __init__(self):
@@ -109,6 +117,41 @@ class LinearFunctionPlotter:
         gx = [self.x_point - dist, self.x_point]
         gy = [self.k * (self.x_point - dist) + self.b, y_point]
         self.angle_line_diag.set_data(gx, gy)
+        
+        # Рисуем дугу угла
+        angle_rad = np.arctan(self.k)
+        angle_deg = np.degrees(angle_rad)
+        
+        # Параметры для дуги
+        arc_radius = 0.5 * (self.ax.get_xlim()[1] - self.ax.get_xlim()[0]) / 20
+        if arc_radius < 0.1:
+            arc_radius = 0.1
+            
+        theta1 = 0
+        theta2 = angle_deg
+        
+        # Удаляем старые дуги и текст перед добавлением новых
+        for artist in self.ax.artists[:]:
+            if isinstance(artist, patches.Arc):
+                artist.remove()
+        for child in self.ax.get_children():
+            if hasattr(child, 'get_text') and '°' in str(child.get_text()):
+                child.remove()
+        
+        # Рисуем дугу
+        arc = patches.Arc((self.x_point, y_point), 
+                         2*arc_radius, 2*arc_radius,
+                         angle=0,
+                         theta1=theta1,
+                         theta2=theta2,
+                         color='green', linewidth=2)
+        self.ax.add_patch(arc)
+        
+        # Подпись угла
+        label_x = self.x_point + arc_radius * np.cos(np.radians(angle_deg/2))
+        label_y = y_point + arc_radius * np.sin(np.radians(angle_deg/2))
+        self.ax.text(label_x, label_y, f'{angle_deg:.1f}°', color='green', fontsize=9,
+                    bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7))
         
         # Обновляем заголовок с текущими значениями
         self.ax.set_title(f"y = {self.k:.2f}x + {self.b:.2f} | Точка: ({self.x_point:.2f}, {y_point:.2f})")
