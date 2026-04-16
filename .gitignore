@@ -1,13 +1,1 @@
-```
-# Compiled Python files
-*.pyc
-__pycache__/
-
-# Logs
-*.log
-
-# Environment files
-.env
-.env.local
-*.env.*
-```
+Nothing should be ignored based on the provided file changes. The only modified file is `linear_plotter.py`, which is a source code file and should not be added to .gitignore.

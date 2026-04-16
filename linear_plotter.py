@@ -1,193 +1,239 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.widgets import Slider, TextBox, Button
+from matplotlib.widgets import Slider, TextBox
 import matplotlib.ticker as ticker
-import matplotlib.patches as patches
 
-# Настройка бэкенда для отображения в отдельном окне или inline
+# Настройка бэкенда
 import matplotlib
-# Используем Qt5Agg как основной, так как он более стабилен в Linux средах
 try:
     matplotlib.use('Qt5Agg')
 except ImportError:
     try:
         matplotlib.use('TkAgg')
     except ImportError:
-        matplotlib.use('Agg')  # Для сред без GUI
+        matplotlib.use('Agg')
 
 class LinearFunctionPlotter:
     def __init__(self):
         self.fig, self.ax = plt.subplots(figsize=(10, 8))
         plt.subplots_adjust(left=0.1, bottom=0.35, right=0.95, top=0.95)
-        
+
         # Исходные данные
         self.k = 1.0
         self.b = 0.0
-        self.x_point = 2.0
+        self.x_point_val = 2.0
+        
+        # Параметры сетки и масштаба
         self.step_x = 0.5
         self.step_y = 2.0
-        
+        self.x_lim = 10.0
+        self.y_lim = 10.0
+
         # Генерация данных для линии
-        self.x = np.linspace(-10, 10, 400)
-        self.line, = self.ax.plot(self.x, self.k * self.x + self.b, 'b-', linewidth=2, label='y = kx + b')
-        
+        self.x_data = np.linspace(-self.x_lim, self.x_lim, 400)
+        self.line, = self.ax.plot(self.x_data, self.k * self.x_data + self.b, 'b-', linewidth=2, label=f'y = {self.k}x + {self.b}')
+
         # Точка на графике
-        self.point_scatter = self.ax.scatter([self.x_point], [self.k * self.x_point + self.b], c='red', zorder=5)
-        
-        # Линии для отображения угла
-        self.angle_line_h = self.ax.plot([], [], 'r--', alpha=0.5)[0] # Горизонтальная проекция
-        self.angle_line_diag = self.ax.plot([], [], 'g--', alpha=0.5)[0] # Участок графика
-        
-        # Настройки осей и сетки
-        self.ax.set_title("Линейная функция: Редактирование коэффициентов и сетки")
+        self.point_scatter = self.ax.scatter([self.x_point_val], [self.k * self.x_point_val + self.b], c='red', s=50, zorder=5)
+
+        # Объекты для отрисовки угла (изначально пустые)
+        self.angle_arc = None
+        self.angle_text = None
+        self.horiz_line = None
+        self.diag_line = None
+
+        # Настройки осей
+        self.ax.set_title("Линейная функция: Угол зависит от масштаба (пикселей)")
         self.ax.grid(True, which='both', linestyle='--', alpha=0.7)
         self.ax.set_xlabel("X")
         self.ax.set_ylabel("Y")
         self.ax.legend(loc='upper left')
-        self.ax.set_aspect('auto') # Позволяет масштабировать оси независимо
+        self.ax.set_aspect('auto')
         
+        self.update_limits_and_grid()
+
         # --- Создание виджетов управления ---
+        ax_color = 'lightgoldenrodyellow'
+        rect_slider_k = plt.axes([0.125, 0.25, 0.75, 0.03], facecolor=ax_color)
+        rect_slider_b = plt.axes([0.125, 0.20, 0.75, 0.03], facecolor=ax_color)
+        rect_slider_x = plt.axes([0.125, 0.15, 0.75, 0.03], facecolor=ax_color)
         
-        # Область для слайдеров
-        ax_slider_k = plt.axes([0.125, 0.25, 0.75, 0.03])
-        ax_slider_b = plt.axes([0.125, 0.22, 0.75, 0.03])
-        ax_slider_x = plt.axes([0.125, 0.19, 0.75, 0.03])
-        
-        self.slider_k = Slider(ax_slider_k, 'Коэфф. k (Наклон)', -10.0, 10.0, valinit=self.k)
-        self.slider_b = Slider(ax_slider_b, 'Коэфф. b (Сдвиг)', -10.0, 10.0, valinit=self.b)
-        self.slider_x = Slider(ax_slider_x, 'Точка X (для угла)', -10.0, 10.0, valinit=self.x_point)
-        
-        # Область для текстовых полей (сетка и масштаб)
-        ax_box_dx = plt.axes([0.125, 0.14, 0.2, 0.04])
-        ax_box_dy = plt.axes([0.425, 0.14, 0.2, 0.04])
-        ax_box_xlim = plt.axes([0.125, 0.10, 0.2, 0.04])
-        ax_box_ylim = plt.axes([0.425, 0.10, 0.2, 0.04])
-        
-        self.box_dx = TextBox(ax_box_dx, 'Step X:', initial=str(self.step_x))
-        self.box_dy = TextBox(ax_box_dy, 'Step Y:', initial=str(self.step_y))
-        self.box_xlim = TextBox(ax_box_xlim, 'X Limit (±):', initial='10')
-        self.box_ylim = TextBox(ax_box_ylim, 'Y Limit (±):', initial='10')
-        
-        # Подключение событий
-        self.slider_k.on_changed(self.update_graph)
-        self.slider_b.on_changed(self.update_graph)
-        self.slider_x.on_changed(self.update_graph)
-        
-        self.box_dx.on_submit(self.update_grid_and_view)
-        self.box_dy.on_submit(self.update_grid_and_view)
-        self.box_xlim.on_submit(self.update_grid_and_view)
-        self.box_ylim.on_submit(self.update_grid_and_view)
-        
-        # Первичная отрисовка
-        self.update_graph(None)
-        self.update_grid_and_view(None)
-        
-        plt.show()
+        self.slider_k = Slider(rect_slider_k, 'K (наклон)', -10.0, 10.0, valinit=self.k)
+        self.slider_b = Slider(rect_slider_b, 'B (сдвиг)', -10.0, 10.0, valinit=self.b)
+        self.slider_x = Slider(rect_slider_x, 'Точка X', -self.x_lim, self.x_lim, valinit=self.x_point_val)
 
-    def update_graph(self, val):
-        """Обновление линии, точки и угла при изменении слайдеров"""
-        # Получаем значения
-        self.k = self.slider_k.val
-        self.b = self.slider_b.val
-        self.x_point = self.slider_x.val
-        
-        # Обновляем линию функции
-        y_vals = self.k * self.x + self.b
-        self.line.set_ydata(y_vals)
-        
-        # Вычисляем координаты точки
-        y_point = self.k * self.x_point + self.b
-        self.point_scatter.set_offsets([[self.x_point, y_point]])
-        
-        # Рисуем угол
-        # Горизонтальная линия от (x_point - 1, y_point) до (x_point, y_point)
-        # Но лучше сделать фиксированную длину или до пересечения с сеткой. 
-        # Сделаем отступ в 1 единицу по X для наглядности угла
-        h_start_x = self.x_point - 1.5 if self.k >= 0 else self.x_point - 1.5
-        # Для визуализации угла нарисуем луч от точки влево и луч по графику
-        
-        # Луч горизонтальный (проекция на ось X относительно точки)
-        # Рисуем от точки влево на некоторую дистанцию
-        dist = 2.0 
-        hx = [self.x_point - dist, self.x_point]
-        hy = [y_point, y_point]
-        self.angle_line_h.set_data(hx, hy)
-        
-        # Луч по графику (от точки назад на ту же дистанцию по X)
-        gx = [self.x_point - dist, self.x_point]
-        gy = [self.k * (self.x_point - dist) + self.b, y_point]
-        self.angle_line_diag.set_data(gx, gy)
-        
-        # Рисуем дугу угла
-        angle_rad = np.arctan(self.k)
-        angle_deg = np.degrees(angle_rad)
-        
-        # Параметры для дуги
-        arc_radius = 0.5 * (self.ax.get_xlim()[1] - self.ax.get_xlim()[0]) / 20
-        if arc_radius < 0.1:
-            arc_radius = 0.1
-            
-        theta1 = 0
-        theta2 = angle_deg
-        
-        # Удаляем старые дуги и текст перед добавлением новых
-        for artist in self.ax.artists[:]:
-            if isinstance(artist, patches.Arc):
-                artist.remove()
-        for child in self.ax.get_children():
-            if hasattr(child, 'get_text') and '°' in str(child.get_text()):
-                child.remove()
-        
-        # Рисуем дугу
-        arc = patches.Arc((self.x_point, y_point), 
-                         2*arc_radius, 2*arc_radius,
-                         angle=0,
-                         theta1=theta1,
-                         theta2=theta2,
-                         color='green', linewidth=2)
-        self.ax.add_patch(arc)
-        
-        # Подпись угла
-        label_x = self.x_point + arc_radius * np.cos(np.radians(angle_deg/2))
-        label_y = y_point + arc_radius * np.sin(np.radians(angle_deg/2))
-        self.ax.text(label_x, label_y, f'{angle_deg:.1f}°', color='green', fontsize=9,
-                    bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7))
-        
-        # Обновляем заголовок с текущими значениями
-        self.ax.set_title(f"y = {self.k:.2f}x + {self.b:.2f} | Точка: ({self.x_point:.2f}, {y_point:.2f})")
-        
-        self.fig.canvas.draw_idle()
+        # Текстовые поля для сетки и масштаба
+        rect_step_x = plt.axes([0.125, 0.10, 0.2, 0.03], facecolor=ax_color)
+        rect_step_y = plt.axes([0.35, 0.10, 0.2, 0.03], facecolor=ax_color)
+        rect_scale_x = plt.axes([0.125, 0.05, 0.2, 0.03], facecolor=ax_color)
+        rect_scale_y = plt.axes([0.35, 0.05, 0.2, 0.03], facecolor=ax_color)
 
-    def update_grid_and_view(self, text):
-        """Обновление сетки и масштабов осей из текстовых полей"""
+        self.box_step_x = TextBox(rect_step_x, 'Step X', initial=str(self.step_x))
+        self.box_step_y = TextBox(rect_step_y, 'Step Y', initial=str(self.step_y))
+        self.box_scale_x = TextBox(rect_scale_x, 'X Limit (+-)', initial=str(self.x_lim))
+        self.box_scale_y = TextBox(rect_scale_y, 'Y Limit (+-)', initial=str(self.y_lim))
+
+        # Привязка событий
+        self.slider_k.on_changed(self.update_all)
+        self.slider_b.on_changed(self.update_all)
+        self.slider_x.on_changed(self.update_point_only)
+        
+        self.box_step_x.on_submit(self.update_limits_and_grid)
+        self.box_step_y.on_submit(self.update_limits_and_grid)
+        self.box_scale_x.on_submit(self.update_limits_and_grid)
+        self.box_scale_y.on_submit(self.update_limits_and_grid)
+        
+        # Событие перерисовки (ресайз окна, пан, зум)
+        self.cid_draw = self.fig.canvas.mpl_connect('draw_event', self.on_draw_event)
+
+        self.update_all(None)
+
+    def update_limits_and_grid(self, text=None):
+        """Обновляет пределы осей и шаг сетки из текстовых полей."""
         try:
-            # Чтение значений
-            dx = float(self.box_dx.text.strip())
-            dy = float(self.box_dy.text.strip())
-            lim_x = float(self.box_xlim.text.strip())
-            lim_y = float(self.box_ylim.text.strip())
+            self.step_x = float(self.box_step_x.text)
+            self.step_y = float(self.box_step_y.text)
+            self.x_lim = float(self.box_scale_x.text)
+            self.y_lim = float(self.box_scale_y.text)
             
-            # Проверка на положительность шагов
-            if dx <= 0 or dy <= 0:
-                raise ValueError("Шаг должен быть > 0")
-                
-            self.step_x = dx
-            self.step_y = dy
+            self.ax.set_xlim(-self.x_lim, self.x_lim)
+            self.ax.set_ylim(-self.y_lim, self.y_lim)
             
-            # Настройка сетки
             self.ax.xaxis.set_major_locator(ticker.MultipleLocator(self.step_x))
             self.ax.yaxis.set_major_locator(ticker.MultipleLocator(self.step_y))
             
-            # Настройка пределов осей (масштабирование)
-            self.ax.set_xlim(-lim_x, lim_x)
-            self.ax.set_ylim(-lim_y, lim_y)
+            self.slider_x.valmin = -self.x_lim
+            self.slider_x.valmax = self.x_lim
             
-            # Принудительное обновление канваса
-            self.fig.canvas.draw_idle()
-            
+            self.update_all(None)
         except ValueError:
-            # Если введено не число, просто игнорируем или можно подсветить ошибку
             pass
 
+    def on_draw_event(self, event):
+        """Событие отрисовки. Вызывается при изменении вида (зум, пан, ресайз)."""
+        self.draw_angle_visual()
+        
+    def update_all(self, val):
+        """Полное обновление графика."""
+        self.k = self.slider_k.val
+        self.b = self.slider_b.val
+        self.x_point_val = self.slider_x.val
+        
+        y_func = self.k * self.x_data + self.b
+        self.line.set_ydata(y_func)
+        self.line.set_label(f'y = {self.k:.2f}x + {self.b:.2f}')
+        self.ax.legend(loc='upper left')
+        
+        self.update_point_only(val)
+
+    def update_point_only(self, val):
+        """Обновление только позиции точки и угла."""
+        if val is not None:
+            self.x_point_val = self.slider_x.val
+            
+        y_point = self.k * self.x_point_val + self.b
+        self.point_scatter.set_offsets([[self.x_point_val, y_point]])
+        
+        self.draw_angle_visual()
+        self.fig.canvas.draw_idle()
+
+    def draw_angle_visual(self):
+        """
+        Рисует угол на основе экранных координат (пикселей).
+        Сначала удаляет старые элементы угла.
+        """
+        # 1. Очистка старых элементов
+        if self.angle_arc:
+            self.angle_arc.remove()
+            self.angle_arc = None
+        if self.angle_text:
+            self.angle_text.remove()
+            self.angle_text = None
+        if self.horiz_line:
+            self.horiz_line.remove()
+            self.horiz_line = None
+        if self.diag_line:
+            self.diag_line.remove()
+            self.diag_line = None
+
+        xlim = self.ax.get_xlim()
+        ylim = self.ax.get_ylim()
+        
+        x0 = self.x_point_val
+        y0 = self.k * x0 + self.b
+        
+        if not (xlim[0] <= x0 <= xlim[1] and ylim[0] <= y0 <= ylim[1]):
+            return
+
+        # 2. Преобразование в пиксели для расчета реального визуального угла
+        dx_data = (xlim[1] - xlim[0]) * 0.1
+        x1_data = x0 + dx_data
+        y1_data = self.k * x1_data + self.b
+        
+        trans = self.ax.transData.transform
+        pt0_px = trans([x0, y0])
+        pt1_px = trans([x1_data, y1_data])
+        
+        vec_x = pt1_px[0] - pt0_px[0]
+        vec_y = pt1_px[1] - pt0_px[1]
+        
+        if abs(vec_x) < 1e-6:
+            angle_rad = np.pi / 2 if vec_y > 0 else -np.pi / 2
+        else:
+            angle_rad = np.arctan2(vec_y, vec_x)
+            
+        if angle_rad < 0:
+            angle_rad += 2 * np.pi
+            
+        angle_deg = np.degrees(angle_rad)
+        
+        # 3. Расчет размеров для отрисовки дуги (чтобы она была круглой на экране)
+        bbox = self.ax.get_window_extent()
+        width_px = bbox.width
+        height_px = bbox.height
+        
+        units_per_px_x = (xlim[1] - xlim[0]) / width_px
+        units_per_px_y = (ylim[1] - ylim[0]) / height_px
+        
+        radius_px = 50.0
+        radius_x_data = radius_px * units_per_px_x
+        radius_y_data = radius_px * units_per_px_y
+        
+        # 4. Отрисовка дуги
+        t = np.linspace(0, angle_rad, 100)
+        arc_x = x0 + radius_x_data * np.cos(t)
+        arc_y = y0 + radius_y_data * np.sin(t)
+        
+        self.angle_arc, = self.ax.plot(arc_x, arc_y, color='green', linewidth=2)
+        
+        # Горизонтальный луч
+        h_x = [x0, x0 + radius_x_data]
+        h_y = [y0, y0]
+        self.horiz_line, = self.ax.plot(h_x, h_y, 'r--', alpha=0.6)
+        
+        # Диагональный луч
+        end_x = x0 + radius_x_data * np.cos(angle_rad)
+        end_y = y0 + radius_y_data * np.sin(angle_rad)
+        d_x = [x0, end_x]
+        d_y = [y0, end_y]
+        self.diag_line, = self.ax.plot(d_x, d_y, 'g--', alpha=0.6)
+        
+        # Текст с градусами
+        mid_angle = angle_rad / 2
+        text_r_px = radius_px * 1.2
+        text_r_x = text_r_px * units_per_px_x
+        text_r_y = text_r_px * units_per_px_y
+        
+        tx = x0 + text_r_x * np.cos(mid_angle)
+        ty = y0 + text_r_y * np.sin(mid_angle)
+        
+        display_angle = angle_deg
+        if display_angle > 180:
+            display_angle = 360 - display_angle
+            
+        self.angle_text = self.ax.text(tx, ty, f'{display_angle:.1f}°', color='blue', fontsize=12, fontweight='bold',
+                                       ha='center', va='center', bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
+
 if __name__ == "__main__":
-    app = LinearFunctionPlotter()
+    plotter = LinearFunctionPlotter()
+    plt.show()
